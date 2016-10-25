@@ -1,8 +1,8 @@
 /** @module $$PREBID_GLOBAL$$ */
 
-import { getGlobal } from './prebidGlobal';
-import { flatten, uniques, getKeys, isGptPubadsDefined, getHighestCpm } from './utils';
-import { videoAdUnit, hasNonVideoBidder } from './video';
+import {getGlobal} from './prebidGlobal';
+import {flatten, uniques, getKeys, isGptPubadsDefined, getHighestCpm} from './utils';
+import {videoAdUnit, hasNonVideoBidder} from './video';
 import 'polyfill';
 import {parse as parseURL, format as formatURL} from './url';
 import {isValidePriceConfig} from './cpmBucketManager';
@@ -38,6 +38,7 @@ var eventValidators = {
 
 $$PREBID_GLOBAL$$._bidsRequested = [];
 $$PREBID_GLOBAL$$._bidsReceived = [];
+$$PREBID_GLOBAL$$._adUnitCodes = [];
 $$PREBID_GLOBAL$$._winningBids = [];
 $$PREBID_GLOBAL$$._adsReceived = [];
 $$PREBID_GLOBAL$$._sendAllBids = false;
@@ -111,8 +112,8 @@ function checkDefinedPlacement(id) {
 function resetPresetTargeting() {
   if (isGptPubadsDefined()) {
     window.googletag.pubads().getSlots().forEach(slot => {
-      pbTargetingKeys.forEach(function(key){
-        slot.setTargeting(key,null);
+      pbTargetingKeys.forEach(function (key) {
+        slot.setTargeting(key, null);
       });
     });
   }
@@ -121,7 +122,7 @@ function resetPresetTargeting() {
 function setTargeting(targetingConfig) {
   window.googletag.pubads().getSlots().forEach(slot => {
     targetingConfig.filter(targeting => Object.keys(targeting)[0] === slot.getAdUnitPath() ||
-      Object.keys(targeting)[0] === slot.getSlotElementId())
+    Object.keys(targeting)[0] === slot.getSlotElementId())
       .forEach(targeting => targeting[Object.keys(targeting)[0]]
         .forEach(key => {
           key[Object.keys(key)[0]]
@@ -193,7 +194,7 @@ function getDealTargeting() {
           [`${key}_${bid.bidderCode}`.substring(0, 20)]: [bid.adserverTargeting[key]]
         };
       })
-      .concat({ [dealKey.substring(0, 20)]: [bid.adserverTargeting[dealKey]] })
+        .concat({ [dealKey.substring(0, 20)]: [bid.adserverTargeting[dealKey]] })
     };
   });
 }
@@ -203,7 +204,7 @@ function getDealTargeting() {
  */
 function getAlwaysUseBidTargeting() {
   //in case using a custom standard key set, we'll capture those here
-  let standardKeys = bidmanager.getStandardBidderAdServerTargeting().map(targeting =>{
+  let standardKeys = bidmanager.getStandardBidderAdServerTargeting().map(targeting => {
     return targeting.key;
   });
   //then append standard keys defined in the library.
@@ -254,7 +255,7 @@ function getAllTargeting() {
   targeting.map(adUnitCode => {
     Object.keys(adUnitCode).map(key => {
       adUnitCode[key].map(targetKey => {
-        if(pbTargetingKeys.indexOf(Object.keys(targetKey)[0]) === -1) {
+        if (pbTargetingKeys.indexOf(Object.keys(targetKey)[0]) === -1) {
           pbTargetingKeys = Object.keys(targetKey).concat(pbTargetingKeys);
         }
       });
@@ -263,29 +264,14 @@ function getAllTargeting() {
   return targeting;
 }
 
-function markComplete(adObject) {
-  $$PREBID_GLOBAL$$._bidsRequested.filter(request => request.requestId === adObject.requestId)
-    .forEach(request => request.bids.filter(bid => bid.placementCode === adObject.adUnitCode)
-      .forEach(bid => bid.complete = true));
+function clearPlacements() {
+  const adUnitCodes = $$PREBID_GLOBAL$$._adUnitCodes;
+  let requested = $$PREBID_GLOBAL$$._bidsRequested;
+  let received = $$PREBID_GLOBAL$$._bidsReceived;
 
-  $$PREBID_GLOBAL$$._bidsReceived.filter(bid => {
-    return bid.requestId === adObject.requestId && bid.adUnitCode === adObject.adUnitCode;
-  }).forEach(bid => bid.complete = true);
-}
-
-function removeComplete() {
-  let requests = $$PREBID_GLOBAL$$._bidsRequested;
-  let responses = $$PREBID_GLOBAL$$._bidsReceived;
-
-  requests.map(request => request.bids
-      .filter(bid => bid.complete))
-    .forEach(request => requests.splice(requests.indexOf(request), 1));
-
-  responses.filter(bid => bid.complete).forEach(bid => responses.splice(responses.indexOf(bid), 1));
-
-  // also remove bids that have an empty or error status so known as not pending for render
-  responses.filter(bid => bid.getStatusCode && bid.getStatusCode() === 2)
-    .forEach(bid => responses.splice(responses.indexOf(bid), 1));
+  requested = requested.filter(request => request.bids
+    .filter(bid => !adUnitCodes.includes(bid.placementCode)).length > 0);
+  received = received.filter(bid => !adUnitCodes.includes(bid.adUnitCode));
 }
 
 //////////////////////////////////
@@ -313,7 +299,7 @@ $$PREBID_GLOBAL$$.getAdserverTargetingForAdUnitCodeStr = function (adunitCode) {
 };
 
 /**
-* This function returns the query string targeting parameters available at this moment for a given ad unit. Note that some bidder's response may not have been received if you call this function too quickly after the requests are sent.
+ * This function returns the query string targeting parameters available at this moment for a given ad unit. Note that some bidder's response may not have been received if you call this function too quickly after the requests are sent.
  * @param adUnitCode {string} adUnitCode to get the bid responses for
  * @returns {object}  returnObj return bids
  */
@@ -417,6 +403,7 @@ $$PREBID_GLOBAL$$.setTargetingForGPTAsync = function () {
   //first reset any old targeting
   getPresetTargeting();
   resetPresetTargeting();
+
   //now set new targeting keys
   setTargeting(getAllTargeting());
 };
@@ -450,14 +437,12 @@ $$PREBID_GLOBAL$$.renderAd = function (doc, id) {
         //emit 'bid won' event here
         events.emit(BID_WON, adObject);
 
-        // mark bid requests and responses for this placement in this auction as "complete"
-        markComplete(adObject);
         var height = adObject.height;
         var width = adObject.width;
         var url = adObject.adUrl;
         var ad = adObject.ad;
 
-        if (doc===document || adObject.mediaType === 'video') {
+        if (doc === document || adObject.mediaType === 'video') {
           utils.logError('Error trying to write ad. Ad render call ad id ' + id + ' was prevented from writing to the main document.');
         } else if (ad) {
           doc.write(ad);
@@ -508,9 +493,10 @@ $$PREBID_GLOBAL$$.removeAdUnit = function (adUnitCode) {
   }
 };
 
-$$PREBID_GLOBAL$$.clearAuction = function() {
+$$PREBID_GLOBAL$$.clearAuction = function () {
   auctionRunning = false;
   utils.logMessage('Prebid auction cleared');
+
   events.emit(AUCTION_END);
   if (bidRequestQueue.length) {
     bidRequestQueue.shift()();
@@ -528,36 +514,46 @@ $$PREBID_GLOBAL$$.requestBids = function ({ bidsBackHandler, timeout, adUnits, a
   const cbTimeout = $$PREBID_GLOBAL$$.cbTimeout = timeout || $$PREBID_GLOBAL$$.bidderTimeout;
   adUnits = adUnits || $$PREBID_GLOBAL$$.adUnits;
 
-  // if specific adUnitCodes filter adUnits for those codes
   if (adUnitCodes && adUnitCodes.length) {
-    adUnits = adUnits.filter(adUnit => adUnitCodes.includes(adUnit.code));
+    // if specific adUnitCodes supplied filter adUnits for those codes
+    adUnits = adUnits.filter(unit => adUnitCodes.includes(unit.code));
+  } else {
+    // otherwise derive adUnitCodes from adUnits
+    adUnitCodes = adUnits && adUnits.map(unit => unit.code);
   }
+
+  // we will use adUnitCodes for filtering the current auction
+  $$PREBID_GLOBAL$$._adUnitCodes = adUnitCodes;
 
   // for video-enabled adUnits, only request bids if all bidders support video
   const invalidVideoAdUnits = adUnits.filter(videoAdUnit).filter(hasNonVideoBidder);
   invalidVideoAdUnits.forEach(adUnit => {
     utils.logError(`adUnit ${adUnit.code} has 'mediaType' set to 'video' but contains a bidder that doesn't support video. No Prebid demand requests will be triggered for this adUnit.`);
     for (let i = 0; i < adUnits.length; i++) {
-      if (adUnits[i].code === adUnit.code) {adUnits.splice(i, 1);}
+      if (adUnits[i].code === adUnit.code) {
+        adUnits.splice(i, 1);
+      }
     }
   });
 
   if (auctionRunning) {
     bidRequestQueue.push(() => {
-      $$PREBID_GLOBAL$$.requestBids({ bidsBackHandler, timeout: cbTimeout, adUnits });
+      $$PREBID_GLOBAL$$.requestBids({ bidsBackHandler, timeout: cbTimeout, adUnits, adUnitCodes });
     });
     return;
   }
-  auctionRunning = true;
-  removeComplete();
 
+  auctionRunning = true;
+  bidmanager.externalCallbackReset();
+  clearPlacements();
   utils.logInfo('Invoking $$PREBID_GLOBAL$$.requestBids', arguments);
 
   if (!adUnits || adUnits.length === 0) {
     utils.logMessage('No adUnits configured. No bids requested.');
-  if (typeof bidsBackHandler === objectType_function) {
-    bidmanager.addOneTimeCallback(bidsBackHandler, false);
-  }
+    if (typeof bidsBackHandler === objectType_function) {
+      bidmanager.addOneTimeCallback(bidsBackHandler, false);
+    }
+
     bidmanager.executeCallback();
     return;
   }
@@ -779,11 +775,11 @@ $$PREBID_GLOBAL$$.setPriceGranularity = function (granularity) {
     utils.logError('Prebid Error: no value passed to `setPriceGranularity()`');
     return;
   }
-  if(typeof granularity === 'string') {
+  if (typeof granularity === 'string') {
     bidmanager.setPriceGranularity(granularity);
   }
-  else if(typeof granularity === 'object') {
-    if(!isValidePriceConfig(granularity)){
+  else if (typeof granularity === 'object') {
+    if (!isValidePriceConfig(granularity)) {
       utils.logError('Invalid custom price value passed to `setPriceGranularity()`');
       return;
     }
@@ -811,14 +807,14 @@ $$PREBID_GLOBAL$$.buildMasterVideoTagFromAdserverTag = function (adserverTag, op
   var urlComponents = parseURL(adserverTag);
 
   //return original adserverTag if no bids received
-  if($$PREBID_GLOBAL$$._bidsReceived.length === 0) {
+  if ($$PREBID_GLOBAL$$._bidsReceived.length === 0) {
     return adserverTag;
   }
 
   var masterTag = '';
-  if(options.adserver.toLowerCase() === 'dfp') {
+  if (options.adserver.toLowerCase() === 'dfp') {
     var dfpAdserverObj = adserver.dfpAdserver(options, urlComponents);
-    if(!dfpAdserverObj.verifyAdserverTag()) {
+    if (!dfpAdserverObj.verifyAdserverTag()) {
       utils.logError('Invalid adserverTag, required google params are missing in query string');
     }
     dfpAdserverObj.appendQueryParams();
