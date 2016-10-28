@@ -1,8 +1,8 @@
 /** @module $$PREBID_GLOBAL$$ */
 
-import {getGlobal} from './prebidGlobal';
-import {flatten, uniques, isGptPubadsDefined, getHighestCpm, adUnitsFilter} from './utils';
-import {videoAdUnit, hasNonVideoBidder} from './video';
+import { getGlobal } from './prebidGlobal';
+import { flatten, uniques, isGptPubadsDefined, getHighestCpm, adUnitsFilter}  from './utils';
+import { videoAdUnit, hasNonVideoBidder } from './video';
 import 'polyfill';
 import {parse as parseURL, format as formatURL} from './url';
 import {isValidePriceConfig} from './cpmBucketManager';
@@ -112,8 +112,8 @@ function checkDefinedPlacement(id) {
 function resetPresetTargeting() {
   if (isGptPubadsDefined()) {
     window.googletag.pubads().getSlots().forEach(slot => {
-      pbTargetingKeys.forEach(function (key) {
-        slot.setTargeting(key, null);
+      pbTargetingKeys.forEach(function(key){
+        slot.setTargeting(key,null);
       });
     });
   }
@@ -122,7 +122,7 @@ function resetPresetTargeting() {
 function setTargeting(targetingConfig) {
   window.googletag.pubads().getSlots().forEach(slot => {
     targetingConfig.filter(targeting => Object.keys(targeting)[0] === slot.getAdUnitPath() ||
-    Object.keys(targeting)[0] === slot.getSlotElementId())
+      Object.keys(targeting)[0] === slot.getSlotElementId())
       .forEach(targeting => targeting[Object.keys(targeting)[0]]
         .forEach(key => {
           key[Object.keys(key)[0]]
@@ -208,7 +208,7 @@ function getDealTargeting(adUnitCodes) {
  */
 function getAlwaysUseBidTargeting(adUnitCodes) {
   //in case using a custom standard key set, we'll capture those here
-  let standardKeys = bidmanager.getStandardBidderAdServerTargeting().map(targeting => {
+  let standardKeys = bidmanager.getStandardBidderAdServerTargeting().map(targeting =>{
     return targeting.key;
   });
 
@@ -435,7 +435,7 @@ $$PREBID_GLOBAL$$.renderAd = function (doc, id) {
         var url = adObject.adUrl;
         var ad = adObject.ad;
 
-        if (doc === document || adObject.mediaType === 'video') {
+        if (doc===document || adObject.mediaType === 'video') {
           utils.logError('Error trying to write ad. Ad render call ad id ' + id + ' was prevented from writing to the main document.');
         } else if (ad) {
           doc.write(ad);
@@ -486,10 +486,9 @@ $$PREBID_GLOBAL$$.removeAdUnit = function (adUnitCode) {
   }
 };
 
-$$PREBID_GLOBAL$$.clearAuction = function () {
+$$PREBID_GLOBAL$$.clearAuction = function() {
   auctionRunning = false;
   utils.logMessage('Prebid auction cleared');
-
   events.emit(AUCTION_END);
   if (bidRequestQueue.length) {
     bidRequestQueue.shift()();
@@ -523,9 +522,7 @@ $$PREBID_GLOBAL$$.requestBids = function ({ bidsBackHandler, timeout, adUnits, a
   invalidVideoAdUnits.forEach(adUnit => {
     utils.logError(`adUnit ${adUnit.code} has 'mediaType' set to 'video' but contains a bidder that doesn't support video. No Prebid demand requests will be triggered for this adUnit.`);
     for (let i = 0; i < adUnits.length; i++) {
-      if (adUnits[i].code === adUnit.code) {
-        adUnits.splice(i, 1);
-      }
+      if (adUnits[i].code === adUnit.code) {adUnits.splice(i, 1);}
     }
   });
 
@@ -535,7 +532,6 @@ $$PREBID_GLOBAL$$.requestBids = function ({ bidsBackHandler, timeout, adUnits, a
     });
     return;
   }
-
   auctionRunning = true;
   bidmanager.externalCallbackReset();
   clearPlacements();
@@ -543,10 +539,9 @@ $$PREBID_GLOBAL$$.requestBids = function ({ bidsBackHandler, timeout, adUnits, a
 
   if (!adUnits || adUnits.length === 0) {
     utils.logMessage('No adUnits configured. No bids requested.');
-    if (typeof bidsBackHandler === objectType_function) {
-      bidmanager.addOneTimeCallback(bidsBackHandler, false);
-    }
-
+  if (typeof bidsBackHandler === objectType_function) {
+    bidmanager.addOneTimeCallback(bidsBackHandler, false);
+  }
     bidmanager.executeCallback();
     return;
   }
@@ -768,11 +763,11 @@ $$PREBID_GLOBAL$$.setPriceGranularity = function (granularity) {
     utils.logError('Prebid Error: no value passed to `setPriceGranularity()`');
     return;
   }
-  if (typeof granularity === 'string') {
+  if(typeof granularity === 'string') {
     bidmanager.setPriceGranularity(granularity);
   }
-  else if (typeof granularity === 'object') {
-    if (!isValidePriceConfig(granularity)) {
+  else if(typeof granularity === 'object') {
+    if(!isValidePriceConfig(granularity)){
       utils.logError('Invalid custom price value passed to `setPriceGranularity()`');
       return;
     }
@@ -800,14 +795,14 @@ $$PREBID_GLOBAL$$.buildMasterVideoTagFromAdserverTag = function (adserverTag, op
   var urlComponents = parseURL(adserverTag);
 
   //return original adserverTag if no bids received
-  if ($$PREBID_GLOBAL$$._bidsReceived.length === 0) {
+  if($$PREBID_GLOBAL$$._bidsReceived.length === 0) {
     return adserverTag;
   }
 
   var masterTag = '';
-  if (options.adserver.toLowerCase() === 'dfp') {
+  if(options.adserver.toLowerCase() === 'dfp') {
     var dfpAdserverObj = adserver.dfpAdserver(options, urlComponents);
-    if (!dfpAdserverObj.verifyAdserverTag()) {
+    if(!dfpAdserverObj.verifyAdserverTag()) {
       utils.logError('Invalid adserverTag, required google params are missing in query string');
     }
     dfpAdserverObj.appendQueryParams();
