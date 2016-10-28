@@ -1,7 +1,7 @@
 /** @module $$PREBID_GLOBAL$$ */
 
 import {getGlobal} from './prebidGlobal';
-import {flatten, uniques, getKeys, isGptPubadsDefined, getHighestCpm} from './utils';
+import {flatten, uniques, isGptPubadsDefined, getHighestCpm, adUnitsFilter} from './utils';
 import {videoAdUnit, hasNonVideoBidder} from './video';
 import 'polyfill';
 import {parse as parseURL, format as formatURL} from './url';
@@ -155,8 +155,10 @@ function getPresetTargeting() {
   }
 }
 
-function getWinningBidTargeting() {
-  let winners = $$PREBID_GLOBAL$$._bidsReceived.map(bid => bid.adUnitCode)
+function getWinningBidTargeting(adUnitCodes) {
+  let winners = $$PREBID_GLOBAL$$._bidsReceived
+    .filter(adUnitsFilter.bind(this, adUnitCodes))
+    .map(bid => bid.adUnitCode)
     .filter(uniques)
     .map(adUnitCode => $$PREBID_GLOBAL$$._bidsReceived
       .filter(bid => bid.adUnitCode === adUnitCode ? bid : null)
@@ -185,71 +187,79 @@ function getWinningBidTargeting() {
   return winners;
 }
 
-function getDealTargeting() {
-  return $$PREBID_GLOBAL$$._bidsReceived.filter(bid => bid.dealId).map(bid => {
-    const dealKey = `hb_deal_${bid.bidderCode}`;
-    return {
-      [bid.adUnitCode]: CONSTANTS.TARGETING_KEYS.map(key => {
-        return {
-          [`${key}_${bid.bidderCode}`.substring(0, 20)]: [bid.adserverTargeting[key]]
-        };
-      })
+function getDealTargeting(adUnitCodes) {
+  return $$PREBID_GLOBAL$$._bidsReceived
+    .filter(adUnitsFilter.bind(this, adUnitCodes))
+    .filter(bid => bid.dealId).map(bid => {
+      const dealKey = `hb_deal_${bid.bidderCode}`;
+      return {
+        [bid.adUnitCode]: CONSTANTS.TARGETING_KEYS.map(key => {
+          return {
+            [`${key}_${bid.bidderCode}`.substring(0, 20)]: [bid.adserverTargeting[key]]
+          };
+        })
         .concat({ [dealKey.substring(0, 20)]: [bid.adserverTargeting[dealKey]] })
-    };
-  });
+      };
+    });
 }
 
 /**
  * Get custom targeting keys for bids that have `alwaysUseBid=true`.
  */
-function getAlwaysUseBidTargeting() {
+function getAlwaysUseBidTargeting(adUnitCodes) {
   //in case using a custom standard key set, we'll capture those here
   let standardKeys = bidmanager.getStandardBidderAdServerTargeting().map(targeting => {
     return targeting.key;
   });
+
   //then append standard keys defined in the library.
   standardKeys = standardKeys.concat(CONSTANTS.TARGETING_KEYS).filter(uniques);
-  return $$PREBID_GLOBAL$$._bidsReceived.map(bid => {
-    if (bid.alwaysUseBid) {
-      return {
-        [bid.adUnitCode]: Object.keys(bid.adserverTargeting, key => key).map(key => {
-          // Get only the non-standard keys of the losing bids, since we
-          // don't want to override the standard keys of the winning bid.
-          if (standardKeys.indexOf(key) > -1) {
-            return;
-          }
+  return $$PREBID_GLOBAL$$._bidsReceived
+    .filter(adUnitsFilter.bind(this, adUnitCodes))
+    .map(bid => {
+      if (bid.alwaysUseBid) {
+        return {
+          [bid.adUnitCode]: Object.keys(bid.adserverTargeting, key => key).map(key => {
+            // Get only the non-standard keys of the losing bids, since we
+            // don't want to override the standard keys of the winning bid.
+            if (standardKeys.indexOf(key) > -1) {
+              return;
+            }
 
-          return { [key.substring(0, 20)]: [bid.adserverTargeting[key]] };
-
-        }).filter(key => key) // remove empty elements
-      };
-    }
-  }).filter(bid => bid); // removes empty elements in array;
+            return { [key.substring(0, 20)]: [bid.adserverTargeting[key]] };
+          }).filter(key => key) // remove empty elements
+        };
+      }
+    }).filter(bid => bid); // removes empty elements in array;
 }
 
-function getBidLandscapeTargeting() {
+function getBidLandscapeTargeting(adUnitCodes) {
   const standardKeys = CONSTANTS.TARGETING_KEYS;
 
-  return $$PREBID_GLOBAL$$._bidsReceived.map(bid => {
-    if (bid.adserverTargeting) {
-      return {
-        [bid.adUnitCode]: standardKeys.map(key => {
-          return {
-            [`${key}_${bid.bidderCode}`.substring(0, 20)]: [bid.adserverTargeting[key]]
-          };
-        })
-      };
-    }
-  }).filter(bid => bid); // removes empty elements in array
+  return $$PREBID_GLOBAL$$._bidsReceived
+    .filter(adUnitsFilter.bind(this, adUnitCodes))
+    .map(bid => {
+      if (bid.adserverTargeting) {
+        return {
+          [bid.adUnitCode]: standardKeys.map(key => {
+            return {
+              [`${key}_${bid.bidderCode}`.substring(0, 20)]: [bid.adserverTargeting[key]]
+            };
+          })
+        };
+      }
+    }).filter(bid => bid); // removes empty elements in array
 }
 
-function getAllTargeting() {
+function getAllTargeting(adUnitCode) {
+  const adUnitCodes = adUnitCode && adUnitCode.length ? [adUnitCode] : $$PREBID_GLOBAL$$._adUnitCodes;
+
   // Get targeting for the winning bid. Add targeting for any bids that have
   // `alwaysUseBid=true`. If sending all bids is enabled, add targeting for losing bids.
-  var targeting = getWinningBidTargeting()
-    .concat(getAlwaysUseBidTargeting())
-    .concat($$PREBID_GLOBAL$$._sendAllBids ? getBidLandscapeTargeting() : [])
-    .concat(getDealTargeting());
+  var targeting = getWinningBidTargeting(adUnitCodes)
+    .concat(getAlwaysUseBidTargeting(adUnitCodes))
+    .concat($$PREBID_GLOBAL$$._sendAllBids ? getBidLandscapeTargeting(adUnitCodes) : [])
+    .concat(getDealTargeting(adUnitCodes));
 
   //store a reference of the targeting keys
   targeting.map(adUnitCode => {
@@ -303,25 +313,8 @@ $$PREBID_GLOBAL$$.getAdserverTargetingForAdUnitCodeStr = function (adunitCode) {
  * @param adUnitCode {string} adUnitCode to get the bid responses for
  * @returns {object}  returnObj return bids
  */
-$$PREBID_GLOBAL$$.getAdserverTargetingForAdUnitCode = function (adUnitCode) {
-  utils.logInfo('Invoking $$PREBID_GLOBAL$$.getAdserverTargetingForAdUnitCode', arguments);
-
-  return getAllTargeting().filter(targeting => getKeys(targeting)[0] === adUnitCode)
-    .map(targeting => {
-      return {
-        [Object.keys(targeting)[0]]: targeting[Object.keys(targeting)[0]]
-          .map(target => {
-            return {
-              [Object.keys(target)[0]]: target[Object.keys(target)[0]].join(', ')
-            };
-          }).reduce((p, c) => Object.assign(c, p), {})
-      };
-    })
-    .reduce(function (accumulator, targeting) {
-      var key = Object.keys(targeting)[0];
-      accumulator[key] = Object.assign({}, accumulator[key], targeting[key]);
-      return accumulator;
-    }, {})[adUnitCode];
+$$PREBID_GLOBAL$$.getAdserverTargetingForAdUnitCode = function(adUnitCode) {
+  return $$PREBID_GLOBAL$$.getAdserverTargeting(adUnitCode)[adUnitCode];
 };
 
 /**
@@ -330,9 +323,9 @@ $$PREBID_GLOBAL$$.getAdserverTargetingForAdUnitCode = function (adUnitCode) {
  * @alias module:$$PREBID_GLOBAL$$.getAdserverTargeting
  */
 
-$$PREBID_GLOBAL$$.getAdserverTargeting = function () {
+$$PREBID_GLOBAL$$.getAdserverTargeting = function (adUnitCode) {
   utils.logInfo('Invoking $$PREBID_GLOBAL$$.getAdserverTargeting', arguments);
-  return getAllTargeting()
+  return getAllTargeting(adUnitCode)
     .map(targeting => {
       return {
         [Object.keys(targeting)[0]]: targeting[Object.keys(targeting)[0]]
